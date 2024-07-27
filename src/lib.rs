@@ -1,14 +1,15 @@
 use std::fs;
 
 #[derive(Debug, PartialEq)]
-pub struct Items {
-    items: Vec<Item>,
+pub struct TodoList {
+    items: Vec<TodoItem>,
 }
 
-impl Items {
-    pub fn from_file(file_path: &str) -> Items {
-        let file = fs::read_to_string(file_path).expect("Failed to read file");
-        let items = Items {
+impl TodoList {
+    pub fn from_file(file_path: &str) -> TodoList {
+        let file = fs::read_to_string(file_path).unwrap_or_else(|_| String::new());
+
+        let items = TodoList {
             items: file
                 .lines()
                 .skip(1) // Skip the title
@@ -16,7 +17,7 @@ impl Items {
                     if line.is_empty() {
                         None
                     } else {
-                        Some(Item::from_string(line))
+                        Some(TodoItem::from_string(line))
                     }
                 })
                 .collect(),
@@ -24,7 +25,7 @@ impl Items {
         items
     }
 
-    pub fn to_file(&self, file_path: &str) {
+    pub fn save(&self, file_path: &str) {
         let mut content = String::new();
         content.push_str("# TODO\n\n");
         for item in &self.items {
@@ -33,16 +34,53 @@ impl Items {
         }
         fs::write(file_path, content).expect("Failed to write file");
     }
+
+    pub fn list_items(&self) {
+        for (i, item) in self.items.iter().enumerate() {
+            println!("{}: {}", i + 1, item.to_string());
+        }
+    }
+
+    pub fn add_item(&mut self, item: String) {
+        self.items.push(TodoItem::new(item));
+    }
+
+    pub fn mark_done(&mut self, number: usize) {
+        if number == 0 || number > self.items.len() {
+            println!("Invalid item number");
+            return;
+        }
+        self.items[number - 1].done();
+    }
+
+    pub fn remove(&mut self, number: usize) {
+        if number == 0 || number > self.items.len() {
+            println!("Invalid item number");
+            return;
+        }
+        self.items.remove(number - 1);
+    }
+
+    pub fn remove_completed(&mut self) {
+        self.items.retain(|item| !item.done);
+    }
+
+    pub fn remove_all(&mut self) {
+        self.items.clear();
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Item {
+pub struct TodoItem {
     done: bool,
     todo: String,
 }
 
-impl Item {
-    pub fn from_string(todo: &str) -> Item {
+impl TodoItem {
+    pub fn new(todo: String) -> TodoItem {
+        TodoItem { todo, done: false }
+    }
+    pub fn from_string(todo: &str) -> TodoItem {
         let mut chars = todo.chars();
         chars.next(); // -
         chars.next(); // space
@@ -52,12 +90,16 @@ impl Item {
         chars.next(); // space
         let todo: String = chars.collect(); // the todo
 
-        Item { todo, done }
+        TodoItem { todo, done }
     }
 
     pub fn to_string(&self) -> String {
         let done = if self.done { "X" } else { " " };
         format!("- [{}] {}", done, self.todo)
+    }
+
+    pub fn done(&mut self) {
+        self.done = true;
     }
 }
 
@@ -68,82 +110,82 @@ mod tests {
     #[test]
     fn parse_line_list_item_unchecked() {
         let line = "- [ ] Item 1";
-        let expected = Item {
+        let expected = TodoItem {
             todo: "Item 1".to_string(),
             done: false,
         };
 
-        assert_eq!(Item::from_string(line), expected);
+        assert_eq!(TodoItem::from_string(line), expected);
     }
 
     #[test]
     fn parse_line_list_item_checked() {
         let line = "- [X] Item 1";
-        let expected = Item {
+        let expected = TodoItem {
             todo: "Item 1".to_string(),
             done: true,
         };
-        assert_eq!(Item::from_string(line), expected);
+        assert_eq!(TodoItem::from_string(line), expected);
     }
 
     #[test]
     fn parse_file_empty() {
         let file_path = "tests/empty.md";
-        let expected = Items { items: vec![] };
-        assert_eq!(Items::from_file(file_path), expected);
+        let expected = TodoList { items: vec![] };
+        assert_eq!(TodoList::from_file(file_path), expected);
     }
 
     #[test]
     fn parse_file_one_item() {
         let file_path = "tests/one_item.md";
-        let expected = Items {
-            items: vec![Item {
+        let expected = TodoList {
+            items: vec![TodoItem {
                 todo: "Item 1".to_string(),
                 done: false,
             }],
         };
-        assert_eq!(Items::from_file(file_path), expected);
+        assert_eq!(TodoList::from_file(file_path), expected);
     }
 
     #[test]
     fn parse_file_two_items() {
         let file_path = "tests/two_items.md";
-        let expected = Items {
+        let expected = TodoList {
             items: vec![
-                Item {
+                TodoItem {
                     todo: "Item 1".to_string(),
                     done: false,
                 },
-                Item {
+                TodoItem {
                     todo: "Item 2".to_string(),
                     done: true,
                 },
             ],
         };
-        assert_eq!(Items::from_file(file_path), expected);
+        assert_eq!(TodoList::from_file(file_path), expected);
     }
 
     #[test]
     fn parse_file_empty_lines() {
         let file_path = "tests/empty_lines.md";
-        let expected = Items {
+        let expected = TodoList {
             items: vec![
-                Item {
+                TodoItem {
                     todo: "Item 1".to_string(),
                     done: false,
                 },
-                Item {
+                TodoItem {
                     todo: "Item 2".to_string(),
                     done: true,
                 },
             ],
         };
-        assert_eq!(Items::from_file(file_path), expected);
+        assert_eq!(TodoList::from_file(file_path), expected);
     }
 
     #[test]
     fn write_line_list_item_unchecked() {
-        let item = Item {
+        let item = TodoItem {
             todo: "Item 1".to_string(),
             done: false,
         };
@@ -154,7 +196,7 @@ mod tests {
 
     #[test]
     fn write_line_list_item_checked() {
-        let item = Item {
+        let item = TodoItem {
             todo: "Item 1".to_string(),
             done: true,
         };
@@ -164,8 +206,8 @@ mod tests {
 
     #[test]
     fn write_file_empty() {
-        let items = Items { items: vec![] };
-        items.to_file("tests/tmp/empty.md");
+        let items = TodoList { items: vec![] };
+        items.save("tests/tmp/empty.md");
 
         let expected = fs::read_to_string("tests/empty.md").unwrap();
         let actual = fs::read_to_string("tests/tmp/empty.md").unwrap();
@@ -174,13 +216,13 @@ mod tests {
 
     #[test]
     fn write_file_one_item() {
-        let items = Items {
-            items: vec![Item {
+        let items = TodoList {
+            items: vec![TodoItem {
                 todo: "Item 1".to_string(),
                 done: false,
             }],
         };
-        items.to_file("tests/tmp/one_item.md");
+        items.save("tests/tmp/one_item.md");
 
         let expected = fs::read_to_string("tests/one_item.md").unwrap();
         let actual = fs::read_to_string("tests/tmp/one_item.md").unwrap();
@@ -189,19 +231,19 @@ mod tests {
 
     #[test]
     fn write_file_two_items() {
-        let items = Items {
+        let items = TodoList {
             items: vec![
-                Item {
+                TodoItem {
                     todo: "Item 1".to_string(),
                     done: false,
                 },
-                Item {
+                TodoItem {
                     todo: "Item 2".to_string(),
                     done: true,
                 },
             ],
         };
-        items.to_file("tests/tmp/two_items.md");
+        items.save("tests/tmp/two_items.md");
         let expected = fs::read_to_string("tests/two_items.md").unwrap();
         let actual = fs::read_to_string("tests/tmp/two_items.md").unwrap();
         assert_eq!(actual, expected);
